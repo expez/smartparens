@@ -7512,15 +7512,38 @@ of the point."
         (indent-sexp))
       (sp--back-to-indentation column indentation))))
 
+
+(defun sp--inbalanced-string-after-point-p ()
+  (push major-mode sp-navigate-consider-stringlike-sexp)
+  (save-excursion
+    (unwind-protect
+        (let ((str (ignore-errors (sp-get-string))))
+          (when str
+            (goto-char (plist-get str :beg))
+            (= (save-excursion (sp-down-sexp) (point))
+               (save-excursion (sp-down-sexp) (sp-up-sexp) (point)))))
+      (progn (pop sp-navigate-consider-stringlike-sexp) nil))))
+
 (defun sp-region-ok-p (start end)
   (save-excursion
     (save-restriction
       (narrow-to-region start end)
       (goto-char (point-min))
-      (let ((r t))
-        (while (and r (not (eobp)))
-          (setq r (sp-forward-sexp)))
-        r))))
+      (cond
+       ((sp--inbalanced-string-after-point-p))
+       ;; A region without any pairs is trivially ok
+       ((and (not (save-excursion
+                    (re-search-forward (sp--get-opening-regexp (sp--get-pair-list-context))
+                                       nil :noerror)))
+             (not (save-excursion
+                    (re-search-forward (sp--get-closing-regexp (sp--get-pair-list-context))
+                                       nil :noerror))))
+        t)
+       (t (let ((r t))
+            (while (and r (and (not (eobp))
+                               (looking-at "\\([\t ]+\\|\n\\)\\'")))
+              (setq r (sp-forward-sexp)))
+            r))))))
 
 (defun sp-newline ()
   "Insert a newline and indent it.
